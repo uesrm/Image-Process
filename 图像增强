@@ -1,0 +1,483 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tues Apr 28 15:34 2020
+Enden on  Wed Apr 29 19:21 2020
+
+founction
+    add noise
+        Gaussian : line 46
+        salt&pepper : line 72
+    space area way
+        image smoothing
+            conv_average_filter : line 111
+            average filter : line 134
+            medium filter : line 177
+        image sharpen : line 222
+            Roberts
+            Prewitt
+            Sobel
+            Laplas
+    Frequency area way
+        image smoothing : line 264
+            ideal low pass filter
+            Butterworth low pass filter
+            exponential low pass filter
+        image sharpen : line 306
+            ideal high pass filter
+            Butterworth high pass filter
+            exponential high pass filter
+    main : line 354
+        achieve above founction
+
+IDE : Anaconda-Spyder
+Python -version : 3.7
+@auther : dx_mrhlalala
+"""
+
+import cv2
+import numpy as np
+from skimage import io
+from math import exp
+from math import sqrt
+# import tkinter as tk
+import matplotlib.pyplot as plt
+
+
+def Gaussian(image, loc=0, scale=10):
+    """
+    
+    
+    Parameters
+    ----------
+    image : uint8
+        input picture.
+
+    Returns
+    -------
+    picture which add Gaussion noise
+    
+    """
+    img = np.copy(image)
+    size = img.shape
+    Gnoise = np.random.normal(loc, scale, size)
+    Gnoise = Gnoise.reshape(size)
+    Gnoisy = img + Gnoise 
+    if len(size) == 3:
+        typ = 'np.uint8'
+    elif len(size) == 2:
+        typ = 'np.float64'
+    return Gnoisy.astype(eval(typ))
+
+
+def salt_pepper(image, SNR=0.5, s_v_p=0.5):
+    """
+    
+    
+    Parameters
+    ----------
+    image : uint8
+        input picture.
+    SNR : float
+        the percentage of signal. The default is 0.5.
+    s_v_p : float
+        the number of salt / the number of noise. The default is 0.5.
+
+    Returns 
+    -------
+    picture which add salt&pepper nosie
+
+    """
+    global typ
+    img = np.copy(image)
+    size = img.size
+    noise_size = int(size * (1 - SNR))
+    salt_size = int(noise_size * s_v_p)
+    pepper_size = noise_size - salt_size
+    for m in range(0, salt_size):
+        x1 = np.random.randint(0, img.shape[0])
+        y1 = np.random.randint(0, img.shape[1])
+        img[x1, y1] = 1
+    for n in range(0, pepper_size):
+        x2 = np.random.randint(0, img.shape[0])
+        y2 = np.random.randint(0, img.shape[1])
+        img[x2, y2] = 0
+    if len(image.shape) == 3:
+        typ = 'np.uint8'
+    elif len(image.shape) == 2:
+        typ = 'np.float64'
+    return img.astype(eval(typ))
+
+
+def conv_average_filter(image, step):
+    """
+    
+
+    Parameters
+    ----------
+    image : uint8
+        input picture.
+    step : int
+        modul size.
+
+    Returns
+    -------
+    out : float64
+        filter result.
+
+    """
+    
+    h = 1 / step**2 * np.ones((step,step))
+    out = cv2.filter2D(image, -1, h)
+    return out
+    
+    
+def average_filter(image, step):
+    """
+
+
+    Parameters
+    ----------
+    image : uint8/float64
+        input picture.
+    step : int
+        The size of filtering template .
+
+    Returns
+    -------
+    picture is average_filtered
+
+    """
+    img = np.copy(image)
+    size = img.shape
+    move = int(step/2)
+    if len(size) == 3:
+        m, n, l = size
+        for x in range(move, m-move):
+            for y in range(move, n-move):
+                for k in range(l):
+                    change = 0.0
+                    for i in range(-move, move+1):
+                        for j in range(-move, move+1):
+                            change += img[x+i][y+i][k] / step**2
+                    image[x][y][k] = change
+        typ = 'np.uint8'
+    elif len(size) == 2:
+        m, n = size
+        for x in range(move, m-move):
+            for y in range(move, n-move):
+                change = 0.0
+                for i in range(-move, move+1):
+                    for j in range(-move, move+1):
+                        change += img[x+i][y+i] / step**2
+                image[x][y] = change
+        typ = 'np.float64'
+    return image.astype(eval(typ))
+
+
+def medium_filter(image, step):
+    """
+    
+
+    Parameters
+    ----------
+    image : uint8
+        input picture.
+    step : int
+        The size of filtering template.
+
+    Returns
+    -------
+    The picture is medium_filtered.
+
+    """
+    img = np.copy(image)
+    size = img.shape
+    move = int(step/2)
+    if len(size) == 3:
+        m, n, l = size
+        for x in range(move, m-move):
+            for y in range(move, n-move):
+                for k in range(l):
+                    change = []
+                    for i in range(-move, move+1):
+                        for j in range(-move, move+1):
+                            change.append(img[x+i][y+j][k])
+                    change.sort()
+                    image[x][y][k] = change[int(step**2/2)]
+        typ = 'np.uint8'
+    elif len(size) == 2:
+        m, n = size
+        for x in range(move, m-move):
+            for y in range(move, n-move):
+                change = []
+                for i in range(-move, move+1):
+                    for j in range(-move, move+1):
+                        change.append(img[x+i][y+j])
+                change.sort()
+                image[x][y] = change[int(step**2/2)]
+        typ = 'np.float64'
+    return image.astype(eval(typ))
+
+
+def image_sharpening(image, sharpen_kind='Roberts'):
+    """
+    
+
+    Parameters
+    ----------
+    image : uint8
+        input picture, however just allow gray.
+    filter_kind : string, optional = {'Roberts', 'Prewitt', 'Sobel', 'Laplac'}
+        sharpen model. The default is 'Roberts'.
+
+    Returns
+    -------
+    sharp : uint8
+        the result of sharpening.
+
+    """
+    model = {
+    'Robertsx' : np.array([[-1, 0], [0, 1]], dtype=int),
+    'Robertsy' : np.array([[0, -1], [1, 0]], dtype=int),
+    'Prewittx' : np.array([[-1, 0, 1], [-1, 0, 1], [-1, 0, 1]], dtype=int),
+    'Prewitty' : np.array([[-1, -1, -1], [0, 0, 0], [1, 1, 1]], dtype=int),
+    } 
+    img = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    if sharpen_kind == 'Roberts' or sharpen_kind == 'Prewitt':
+        x = cv2.filter2D(img, cv2.CV_16S, model[sharpen_kind+'x'])
+        y = cv2.filter2D(img, cv2.CV_16S, model[sharpen_kind+'y'])
+        absX = cv2.convertScaleAbs(x)
+        absY = cv2.convertScaleAbs(y)
+        sharp = cv2.addWeighted(absX, 0.5, absY, 0.5, 0)
+    elif sharpen_kind == 'Sobel':
+        x = cv2.Sobel(img, cv2.CV_16S, 1, 0) # df(x,y) / dx
+        y = cv2.Sobel(img, cv2.CV_16S, 0, 1) # df(x,y) / dy
+        absX = cv2.convertScaleAbs(x)
+        absY = cv2.convertScaleAbs(y)
+        sharp = cv2.addWeighted(absX, 0.5, absY, 0.5, 0)
+    else:
+        laplac = cv2.Laplacian(img, cv2.CV_16S, ksize=3)
+        sharp = cv2.convertScaleAbs(laplac)
+    return sharp
+
+
+def low_pass_filter(shift, d=50, n=1, filter_kind='ideal'):
+    """
+    
+
+    Parameters
+    ----------
+    shift : complex
+        input fft-shift picture, however just allow gray.
+    d : int
+        dead-frequency.
+    filter_kind : strings, optional = {'ideal', 'Butterworth', 'exponential'}
+        the type of filter. The default is 'ideal'.
+
+    Returns
+    -------
+    H : uint8
+        the result of filter.
+
+    """
+    H = np.zeros(shift.shape)
+    x, y = shift.shape[0]/2, shift.shape[1]/2
+    if filter_kind == 'ideal':
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                if dis <= d:
+                    H[i][j] = 1
+                else:
+                    H[i][j] = 0
+    elif filter_kind == 'Butterworth': 
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                H[i][j] = 1 / (1+ (dis/d)**(2*n))
+    elif filter_kind == 'exponential':
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                H[i][j] = exp((-dis/d)**n)
+    return H
+
+
+def high_pass_filter(shift, d=150, n=3, filter_kind='ideal'):
+    """
+    
+
+    Parameters
+    ----------
+    shift : complex
+        input fft-shift picture, however just allow gray.
+    d : int
+        dead_frequency.
+    filter_kind : strings, optional = {'ideal', 'Butterworth', 'exponential'}
+        the kind of filter. The default is 'ideal'.
+
+    Returns
+    -------
+    H : uint8
+        the result of filter.
+
+    """
+    H = np.zeros(shift.shape)
+    x, y = shift.shape[0]/2, shift.shape[1]/2
+    if filter_kind == 'ideal':
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                if dis <= d:
+                    H[i][j] = 0
+                else:
+                    H[i][j] = 1
+    elif filter_kind == 'Butterworth':
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                if dis == 0:
+                    pass
+                else:
+                    H[i][j] = 1 / (1+ (d/dis)**(2*n))
+    elif filter_kind == 'exponential':
+        for i in range(H.shape[0]):
+            for j in range(H.shape[1]):
+                dis = sqrt((i-x)**2+ (j-y)**2)
+                if dis == 0:
+                    pass
+                else:
+                    H[i][j] = exp(-(d/dis)**n)
+    return H
+    
+
+def main():
+    # load picture
+    file_path = 'C:/Users/lenovo/Desktop/1.jpg'
+    img = io.imread(file_path)
+    plt.imshow(img)
+    plt.title('Original RGB')
+    plt.axis('off')
+    plt.show()
+    
+    # Gray = 0.299R+0.587G+0.114*B
+    r, g, b = [img[:, :, i] for i in range(3)]
+    gray = r*0.299 + g*0.587 + b*0.114
+    plt.imshow(gray, cmap='gray')
+    plt.title('Original Gray')
+    plt.axis('off')
+    plt.show()
+    '''
+    # Gray histogram equalization
+    Gray = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
+    plt.imshow(Gray, cmap='gray')
+    plt.title('cv2 Gray')
+    plt.axis('off')
+    plt.show()
+    hist_gray = cv2.equalizeHist(Gray)
+    plt.imshow(hist_gray, cmap='gray')
+    plt.title('Gray histogram equalization')
+    plt.axis('off')
+    plt.show()
+    
+    # add Gaussian noise
+    Gaussian_img = Gaussian(img, scale=15)
+    Gaussian_gray = Gaussian(gray, scale=15)
+    plt.imshow(Gaussian_img)
+    plt.title('RGB add Gaussian noise')
+    plt.axis('off')
+    plt.show()
+    plt.imshow(Gaussian_gray, cmap='gray')
+    plt.title('Gray add Gaussian noise')
+    plt.axis('off')
+    plt.show()
+    '''
+    # add salt&pepper noise
+    salt_pepper_img = salt_pepper(img, SNR=0.995)
+    salt_pepper_gray = salt_pepper(gray, SNR=0.995)
+    plt.imshow(salt_pepper_img)
+    plt.title('RGB add salt&pepper noise')
+    plt.axis('off')
+    plt.show()
+    plt.imshow(salt_pepper_gray, cmap='gray')
+    plt.title('Gray add salt&pepper noise')
+    plt.axis('off')
+    plt.show()
+    '''
+    # SPACE AREA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    wait_processed = [Gaussian_img, Gaussian_gray, salt_pepper_img, salt_pepper_gray]
+    name = ['RGB Gaussian', 'Gray Gaussian', 'RGB salt&pepper', 'Gray salt&pepper']
+    # space area : image smoothing, average filter
+    for _ in range(4):
+        result = average_filter(wait_processed[_], 3)
+        conv_result = conv_average_filter(wait_processed[_], 3)
+        if name[_][:1] == 'G':
+            plt.imshow(result, cmap='gray')
+            plt.title('average filter to '+name[_])
+            plt.axis('off')
+            plt.show()
+            plt.imshow(conv_result, cmap='gray')
+            plt.title('conv average filter to '+name[_])
+            plt.axis('off')
+            plt.show()
+        else:
+            plt.imshow(result)
+            plt.title('average filter to '+name[_])
+            plt.axis('off')
+            plt.show()
+            plt.imshow(conv_result)
+            plt.title('conv average filter to '+name[_])
+            plt.axis('off')
+            plt.show()
+    # space area : image smoothing, medium filter
+    for _ in range(4):
+        result = medium_filter(wait_processed[_], 3)
+        if name[_][:1] == 'G':
+            plt.imshow(result, cmap='gray')
+        else:
+            plt.imshow(result)
+        plt.title('medium filter to '+ name[_])
+        plt.axis('off')
+        plt.show()
+    
+    # space area : image sharpen, just for Gray Picture
+    sharpen_way = ['Roberts', 'Prewitt', 'Sobel', 'Laplac']
+    path = 'C:/Users/lenovo/Pictures/Unsplashed/f8691906b39a176c3f8405943f8e74ff.png'
+    picture = io.imread(path)
+    picture = salt_pepper(picture, SNR=0.995)
+    for _ in range(4):
+        # img is RGB, because this def has founction: RGB2GRAY
+        result = image_sharpening(picture, sharpen_kind=sharpen_way[_]) 
+        plt.imshow(result, cmap='gray')
+        plt.title('sharpen by '+ sharpen_way[_])
+        plt.axis('off')
+        plt.show()
+    '''
+    # FREQUENCY AREA!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    process_way = ['ideal', 'Butterworth', 'exponential']
+    fft = np.fft.fft2(salt_pepper_gray)
+    shift = np.fft.fftshift(fft)
+    '''
+    # frequency area : image smoothing, just for Gray Picture
+    for _ in range(3):
+        h = low_pass_filter(shift, filter_kind=process_way[_])
+        H = h * shift
+        result = np.abs(np.fft.ifft2(np.fft.ifftshift(H)))
+        plt.imshow(result, cmap='gray')
+        plt.title(process_way[_]+' low pass result')
+        plt.axis('off')
+        plt.show()
+    '''
+    # frequency area : image sharpen, just for Gray Picture 
+    for _ in range(3):
+        h = high_pass_filter(shift, filter_kind=process_way[_])
+        H = h * shift
+        result = np.abs(np.fft.ifft2(np.fft.ifftshift(H)))
+        plt.imshow(result, cmap='gray')
+        plt.title(process_way[_]+' high pass result')
+        plt.axis('off')
+        plt.show()
+    
+    
+if __name__ == '__main__':
+    main()
